@@ -1,6 +1,6 @@
 ### CLI Table Printing for Go
 
-Simple Golang library for CLI-output symbol-drawn table.
+Simple Golang library for CLI-output symbol-drawn table. Columns width can be adjusted.
 
 #### Example what will be printed:
 
