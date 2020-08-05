@@ -1,4 +1,4 @@
-package clitable
+package cli_table_print
 
 import (
 	"fmt"

@@ -1,6 +1,6 @@
 package main
 
-import "./clitable"
+import "github.com/anxp/cli_table_print"
 
 func main() {
 
@@ -40,5 +40,5 @@ func main() {
 		},
 	}
 
-	clitable.PrintTable(tableHeader, tableContent, 16)
+	cli_table_print.PrintTable(tableHeader, tableContent, 16)
 }
