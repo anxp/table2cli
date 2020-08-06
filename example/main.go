@@ -1,6 +1,8 @@
 package main
 
-import "github.com/anxp/cli_table_print"
+import (
+	"github.com/anxp/table2cli"
+)
 
 func main() {
 
@@ -40,5 +42,5 @@ func main() {
 		},
 	}
 
-	cli_table_print.PrintTable(tableHeader, tableContent, 16)
+	table2cli.PrintTable(tableHeader, tableContent, 16)
 }

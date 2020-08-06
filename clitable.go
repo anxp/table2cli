@@ -1,4 +1,4 @@
-package cli_table_print
+package table2cli
 
 import (
 	"fmt"
