@@ -1,62 +1,135 @@
 package table2cli
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 )
 
-func PrintTable(headerRow []string, content [][]string, cellContentWidth int) {
-	//Do validation before start do anything
-	numOfColumns := len(headerRow)
+type ContentCell struct {
+	Data string
+	PrintBottomBorder bool
+}
+
+type TableHeader []string
+type TableContent [][]ContentCell
+
+type Table struct {
+	Header TableHeader
+	Content TableContent
+	ColumnWidths []int
+}
+
+func NewTable(header TableHeader, content TableContent, widths []int) (*Table, error) {
+	// ================================= VALIDATE BEFORE CONSTRUCT: ====================================================
+	numOfColumns := len(header)
 	numOfContentRows := len(content)
 
-	for i := 0; i < numOfContentRows; i++ {
+	if numOfColumns != len(widths) {
+		return nil, errors.New("can't create table - column widths values are missed (or in excess)")
+	}
+
+	for i:= 0; i < numOfContentRows; i++ {
 		if numOfColumns != len(content[i]) {
-			fmt.Println("Data consistency error. Number of columns in header slice != number of columns in content slice.")
-			return
+			return nil, errors.New("data consistency error - number of columns in header slice != number of columns in content slice")
+		}
+	}
+	// =================================================================================================================
+
+	return &Table{Header: header, Content: content, ColumnWidths: widths}, nil
+}
+
+func (t *Table) Print() {
+	numberOfColumns := len(t.Header)
+
+	// Calculate table width (in symbols)
+	// Reminder: t.ColumnWidths[i] is a width of the CONTENT IN THE CELL, not the total width of column!
+	tableWidth := 0
+	for i := 0; i < numberOfColumns; i++ {
+		tableWidth += 1 + 1 + t.ColumnWidths[i] + 1
+
+		if i == numberOfColumns - 1 {
+			tableWidth += 1
 		}
 	}
 
-	// Calculate table width (in symbols)
-	// (border_sym + space + cellContentWidth + space) * numOfColumns + border_sym
-	tableWidth := (1 + 1 + cellContentWidth + 1) * numOfColumns + 1
-
 	//================ Print header row: ===============================================================================
-	printHorizontalLine(tableWidth, "=")
-	printRow(headerRow, numOfColumns, cellContentWidth)
-	printHorizontalLine(tableWidth, "=")
+	t.printHorizontalLine(tableWidth, "=", true)
+	t.printRow(t.Header)
+	t.printHorizontalLine(tableWidth, "=", true)
 	//==================================================================================================================
 
 	//================ Print table content: ============================================================================
-	for i := 0; i < len(content); i++ {
-		printRow(content[i], numOfColumns, cellContentWidth)
+	for currentRowNumber := 0; currentRowNumber < len(t.Content); currentRowNumber++ {
+		currentRow := t.Content[currentRowNumber]
 
-		if i < len(content) - 1 {
-			printHorizontalLine(tableWidth, "-")
+		currentRowContent := make([]string, numberOfColumns)
+		bottomLinePrintingInfo := make([]bool, numberOfColumns)
+		for i := 0; i < numberOfColumns; i++ {
+			currentRowContent[i] = currentRow[i].Data
+			bottomLinePrintingInfo[i] = currentRow[i].PrintBottomBorder
+		}
+
+		t.printRow(currentRowContent)
+
+		if currentRowNumber < len(t.Content) - 1 {
+
+			// Print bottom line of current ROW. Please note, that this line can have unfilled segments (when PrintBottomBorder == false)
+			for i := 0; i < numberOfColumns; i++ {
+
+				// CHOICE of the FIRST symbol of the bottom line of CURRENT COLUMN:
+				if (bottomLinePrintingInfo[i] == true) && (i > 0 && bottomLinePrintingInfo[i - 1] == true) {
+					fmt.Print("*")
+				} else {
+					fmt.Print("|")
+				}
+
+				// Inner column width = one space symbol + actual content width + second space symbol.
+				// This is column width without left and right borders.
+				innerColumnWidth := 1 + t.ColumnWidths[i] + 1
+
+				if bottomLinePrintingInfo[i] == true {
+					t.printHorizontalLine(innerColumnWidth, "-", false)
+				} else {
+					t.printHorizontalLine(innerColumnWidth, " ", false)
+				}
+
+				// If we at the LAST column in ROW:
+				if i == numberOfColumns - 1 {
+					fmt.Print("|\n")
+				}
+			}
 		}
 	}
 
-	printHorizontalLine(tableWidth, "=")
+	t.printHorizontalLine(tableWidth, "=", true)
 	//==================================================================================================================
 }
 
-func printRow(row []string, numOfColumns int, cellContentWidth int) {
+func (t *Table) printRow(cells []string) {
+
+	if len(cells) != len(t.ColumnWidths) {
+		// TODO: Panic
+	}
+
+	numOfColumns := len(cells)
+
 	//Calculate for how many lines current row will be expanded:
-	numOfLines := calculateMaxNumberOfChunksForRow(row, cellContentWidth)
+	numOfLines := t.calculateMaxNumberOfChunksForRow(cells)
 
 	//Break each cell's string into chunks to fit in column width:
 	sliceOfBrokenStrings := make([][]string, numOfColumns)
 
 	for i := 0; i < numOfColumns; i++ {
-		sliceOfBrokenStrings[i] = breakStringIntoSlice(row[i], cellContentWidth, numOfLines)
+		sliceOfBrokenStrings[i] = t.breakStringIntoSlice(cells[i], t.ColumnWidths[i], numOfLines)
 	}
 
 	for j := 0; j < numOfLines; j++ {
 		fmt.Printf("| ") //Print opening (first) symbol in line
 
 		for i := 0; i < numOfColumns; i++ {
-			format := "%-" + strconv.Itoa(cellContentWidth) + "s"
+			format := "%-" + strconv.Itoa(t.ColumnWidths[i]) + "s"
 			fmt.Printf(format, sliceOfBrokenStrings[i][j])
 
 			if i < numOfColumns - 1 {
@@ -68,12 +141,12 @@ func printRow(row []string, numOfColumns int, cellContentWidth int) {
 	}
 }
 
-func calculateMaxNumberOfChunksForRow(row []string, chunkLength int) int {
+func (t *Table) calculateMaxNumberOfChunksForRow(cells []string) int {
 	maxNumberOfChunks := 0
 
-	for i := 0; i < len(row); i++ {
-		numberOfLetters := len(convertStringToRuneSlice(row[i]))
-		numberOfChunksForCurrentString := int(math.Ceil(float64(numberOfLetters) / float64(chunkLength)))
+	for i := 0; i < len(cells); i++ {
+		numberOfLetters := len(t.convertStringToRuneSlice(cells[i]))
+		numberOfChunksForCurrentString := int(math.Ceil(float64(numberOfLetters) / float64(t.ColumnWidths[i])))
 
 		if numberOfChunksForCurrentString > maxNumberOfChunks {
 			maxNumberOfChunks = numberOfChunksForCurrentString
@@ -83,17 +156,17 @@ func calculateMaxNumberOfChunksForRow(row []string, chunkLength int) int {
 	return maxNumberOfChunks
 }
 
-func breakStringIntoSlice(inputString string, chunkLength int, returnedSliceSize int) []string {
+func (t *Table) breakStringIntoSlice(inputString string, chunkLength int, returnedSliceSize int) []string {
 	var resultSlice []string
 
-	inputAdapted := convertStringToRuneSlice(inputString)
+	inputAdapted := t.convertStringToRuneSlice(inputString)
 
 	inputStringLength := len(inputAdapted)
 	numberOfChunks := int(math.Ceil(float64(inputStringLength) / float64(chunkLength)))
-	resultSliceSize := max(returnedSliceSize, numberOfChunks)
+	resultSliceSize := t.max(returnedSliceSize, numberOfChunks)
 
 	for i := 0; i < inputStringLength; i += chunkLength {
-		chunkEndPosition := min(i + chunkLength, inputStringLength)
+		chunkEndPosition := t.min(i + chunkLength, inputStringLength)
 		resultSlice = append(resultSlice, string(inputAdapted[i : chunkEndPosition]))
 	}
 
@@ -106,21 +179,21 @@ func breakStringIntoSlice(inputString string, chunkLength int, returnedSliceSize
 	return resultSlice
 }
 
-func convertStringToRuneSlice(mbString string) []rune {
+func (t *Table) convertStringToRuneSlice(mbString string) []rune {
 	return []rune(mbString)
 }
 
-func printHorizontalLine(length int, symbol string) {
+func (t *Table) printHorizontalLine(length int, symbol string, terminateLine bool) {
 	for i := 0; i < length; i++ {
 		fmt.Print(symbol)
 
-		if i == length - 1 {
+		if terminateLine && i == length - 1 {
 			fmt.Print("\n")
 		}
 	}
 }
 
-func max(x, y int) int {
+func (t *Table) max(x, y int) int {
 	if x > y {
 		return x
 	}
@@ -128,7 +201,7 @@ func max(x, y int) int {
 	return y
 }
 
-func min(x, y int) int {
+func (t *Table) min(x, y int) int {
 	if x < y {
 		return x
 	}
